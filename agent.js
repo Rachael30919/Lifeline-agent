@@ -9,8 +9,7 @@ const { HOSPITALS, DONORS, SEED_REQUESTS } = require('./seed-data');
 const DB_FILE = path.join(__dirname, 'data', 'db.json');
 const NEARBY_KM = 15;
 const WEEK_MS = 7 * 24 * 3600 * 1000;
-let PUBLIC_URL = process.env.PUBLIC_URL || `http://localhost:${process.env.PORT || 3000}`;
-
+let PUBLIC_URL = (process.env.PUBLIC_URL || process.env.RENDER_EXTERNAL_URL || `http://localhost:${process.env.PORT || 3000}`).replace(/\/$/, '');
 let db = null;
 
 // ---------- helpers ----------
