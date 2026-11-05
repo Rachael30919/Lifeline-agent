@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LifeLine Pay</title>
+  <link rel="stylesheet" href="/styles.css">
+  <style>
+    body { background: #e9efec; }
+    .wrap { max-width: 460px; margin: 0 auto; padding: 16px; }
+    .hero { background: var(--brand); color: #fff; border-radius: 16px; padding: 1.1rem 1.2rem; margin-bottom: 1rem; }
+    .hero h1 { font-size: 1.35rem; margin: .2rem 0; }
+    .amt-chips .chip { flex: 1 1 auto; text-align: center; }
+    .method { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; }
+    .method button { padding: .8rem; border-radius: 12px; border: 2px solid var(--line); background: #fff; font: inherit; font-weight: 700; cursor: pointer; }
+    .method button.on { border-color: var(--brand); background: var(--brand-soft); color: var(--brand); }
+    .acct { background: var(--gray-soft); border-radius: 12px; padding: .9rem; text-align: center; }
+    .acct .num { font-size: 1.6rem; font-weight: 900; letter-spacing: .08em; }
+    .success { text-align: center; }
+    .success .tick { width: 64px; height: 64px; border-radius: 50%; background: var(--brand); color: #fff; font-size: 2rem; display: grid; place-items: center; margin: 0 auto .6rem; }
+  </style>
+</head>
+<body>
+  <div class="wrap" id="app"><div class="card empty"><span class="spinner dark"></span></div></div>
+  <div class="modal-bg" id="modalBg"><div class="modal" id="modal"></div></div>
+  <div class="toast" id="toast"></div>
+<script>
+const token = location.pathname.split('/').pop();
+const $ = (s) => document.querySelector(s);
+const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const naira = (n) => '₦' + Math.round(Number(n || 0)).toLocaleString('en-NG');
+let payer = (() => { try { return localStorage.getItem('ll-name') || ''; } catch { return ''; } })();
+let R = null, amount = 10000, method = 'transfer', lastX402 = null, paying = false;
+
+function toast(m) { const t = $('#toast'); t.textContent = m; t.style.display = 'block'; clearTimeout(toast.h); toast.h = setTimeout(() => t.style.display = 'none', 3500); }
+const modal = (html) => { $('#modal').innerHTML = html; $('#modalBg').classList.add('open'); };
+const closeM = () => $('#modalBg').classList.remove('open');
+
+async function load() {
+  const res = await fetch(`/api/pay/${token}`);
+  if (!res.ok) { $('#app').innerHTML = '<div class="card empty">This payment link is not valid.</div>'; return; }
+  R = await res.json();
+  render();
+}
+
+function render() {
+  const pct = Math.min(100, Math.round(R.paid / R.total * 100));
+  const first = R.patientName.split(' ')[0];
+  const done = R.balance === 0;
+  const opts = [5000, 10000, 20000, 50000].filter((a) => a < R.balance);
+  if (!done && amount > R.balance) amount = R.balance;
+  $('#app').innerHTML = `
+    <div class="hero"><div class="small" style="opacity:.85">✚ LifeLine · emergency bill for</div><h1>${esc(R.patientName)}</h1>
+      <div class="small">${esc(R.hospital)} · ${esc(R.need)}${R.bloodGroup ? ` · ${esc(R.bloodGroup)} blood` : ''}</div></div>
+    <div class="card">
+      <div class="row spread"><span class="money" style="font-size:1.5rem">${naira(R.paid)}</span><span class="muted">of ${naira(R.total)}</span></div>
+      <div class="progress" style="margin:.5rem 0"><span style="width:${pct}%"></span></div>
+      <div class="row spread small"><span>${pct}% paid · <b>${naira(R.balance)}</b> left</span>
+        <span class="badge ${R.escrowStatus === 'RELEASED TO HOSPITAL' ? 'b-released' : R.paid ? 'b-escrow' : 'b-none'}">${esc(R.escrowStatus)}</span></div>
+      <p class="small muted" style="margin:.7rem 0 0">🔒 Your money is held safely by LifeLine (escrow) and only goes to the hospital after treatment is done. The lab ${R.labStatus === 'WAITING' ? 'starts as soon as the first payment lands' : 'has already started'}.</p>
+      ${R.donorsAlerted ? `<p class="small" style="margin:.4rem 0 0">🩸 ${R.donorsAlerted} nearby ${esc(R.bloodGroup)} donor(s) alerted${R.donorsConfirmed ? `, ${R.donorsConfirmed} on the way` : ''}.</p>` : ''}
+    </div>
+    ${done ? `<div class="card success"><div class="tick">✓</div><h2>Fully paid. Thank you!</h2><p class="muted">${esc(first)}'s bill is covered.</p></div>` : `
+    <div class="card"><h3>Pay any amount</h3>
+      <div class="chips amt-chips" style="margin-bottom:.6rem">${opts.map((a) => `<button class="chip ${a === amount ? 'on' : ''}" onclick="setAmt(${a})">${naira(a)}</button>`).join('')}
+        <button class="chip ${amount === R.balance ? 'on' : ''}" onclick="setAmt(${R.balance})">Full ${naira(R.balance)}</button></div>
+      <div class="field"><label>Amount (₦)</label><input id="amt" type="number" min="100" max="${R.balance}" value="${amount}" oninput="amount=Math.round(+this.value)"></div>
+      <div class="field"><label>Your name (shown to the family)</label><input id="payer" placeholder="e.g. Uncle Sola" value="${esc(payer)}" oninput="payer=this.value"></div>
+      <label>Pay with</label>
+      <div class="method" style="margin-bottom:1rem"><button class="${method === 'transfer' ? 'on' : ''}" onclick="setMethod('transfer')">🏦 Bank transfer</button><button class="${method === 'card' ? 'on' : ''}" onclick="setMethod('card')">💳 Card</button></div>
+      <button class="btn big" style="width:100%;justify-content:center" onclick="startPay()" id="payBtn">Pay ${naira(amount)}</button>
+      <p class="small muted" style="text-align:center;margin:.6rem 0 0">No app or crypto account needed. Pay in Naira.</p>
+    </div>`}
+    <div class="card"><h3>Share with family</h3><p class="small muted">Everyone can pay into the same bill with this link.</p>
+      <div class="row"><a class="btn small" target="_blank" href="https://wa.me/?text=${encodeURIComponent(`Please help pay for ${R.patientName}'s treatment at ${R.hospital}. Any amount helps: ${location.href}`)}">WhatsApp</a>
+      <button class="btn small ghost" onclick="share()">Copy / share link</button></div></div>
+    <div class="card"><h3>Who has paid (${R.payments.length})</h3>${R.payments.length ? R.payments.slice().reverse().map((p) => `<div class="row spread feed-item"><span>${esc(p.payerName)} <span class="small muted">· ${esc(p.method)}</span></span><span class="money">${naira(p.amount)}</span></div>`).join('') : '<div class="small muted">Be the first.</div>'}</div>
+    <details class="card"><summary>For judges: how this link uses x402 + Stellar</summary>
+      <ol class="small"><li>Pressing Pay calls the bill's x402 endpoint. It answers <b>HTTP 402 Payment Required</b> with what to pay and where (this patient's Stellar escrow account).</li>
+      <li>The Naira on-ramp takes your card/transfer and signs a Stellar payment of NGN tokens into escrow. <i>(Card/transfer is simulated in this demo.)</i></li>
+      <li>The page retries with an <b>X-PAYMENT</b> header. The Agent verifies it and settles it on Stellar, then replies with <b>X-PAYMENT-RESPONSE</b>.</li></ol>
+      ${lastX402 ? `<div class="small"><b>Last 402 response:</b></div><pre>${esc(JSON.stringify(lastX402, null, 2))}</pre>` : '<div class="small muted">Make a payment to see the live 402 response here.</div>'}
+    </details>`;
+}
+window.setAmt = (a) => { amount = a; render(); };
+window.setMethod = (m) => { method = m; render(); };
+window.share = async () => {
+  if (navigator.share) { try { await navigator.share({ title: 'LifeLine', text: `Help pay for ${R.patientName}'s treatment`, url: location.href }); return; } catch {} }
+  await navigator.clipboard.writeText(location.href); toast('Link copied');
+};
+
+async function startPay() {
+  amount = Math.round(+$('#amt').value);
+  const payerName = $('#payer').value.trim() || 'Family member';
+  try { localStorage.setItem('ll-name', payerName); } catch {}
+  if (!(amount > 0)) return toast('Enter an amount');
+  if (amount > R.balance) return toast(`Only ${naira(R.balance)} is left`);
+  // x402 step 1: ask for the resource without payment -> expect 402.
+  const res = await fetch(`/api/pay/${token}/contribute`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount }) });
+  if (res.status !== 402) return toast('Unexpected response from server');
+  lastX402 = await res.json();
+  checkout(payerName, lastX402.accepts[0]);
+}
+
+function checkout(payerName, req) {
+  const body = method === 'card'
+    ? `<div class="field"><label>Card number</label><input value="5399 8300 0000 0008"></div>
+       <div class="grid g2" style="gap:.6rem;grid-template-columns:1fr 1fr"><div class="field"><label>Expiry</label><input value="12/28"></div><div class="field"><label>CVV</label><input value="123"></div></div>
+       <button class="btn big" style="width:100%;justify-content:center" id="confirmPay">Pay ${naira(amount)}</button>`
+    : `<div class="acct"><div class="small muted">Transfer exactly</div><div class="money" style="font-size:1.4rem">${naira(amount)}</div>
+       <div class="small muted" style="margin-top:.5rem">to</div><div class="num">99 1234 5678</div><div><b>LifeLine Escrow / ${esc(R.id)}</b></div><div class="small muted">Demo Bank (simulated)</div></div>
+       <button class="btn big" style="width:100%;justify-content:center;margin-top:1rem" id="confirmPay">I've sent the money</button>`;
+  modal(`<div class="row spread"><h3 style="margin:0">${method === 'card' ? 'Pay with card' : 'Pay by bank transfer'}</h3><span class="badge b-sim">SIMULATED</span></div>
+    <p class="small muted">Paying ${naira(amount)} for ${esc(R.patientName)}. No real money will move in this demo.</p>${body}
+    <button class="btn ghost" style="width:100%;justify-content:center;margin-top:.5rem" onclick="closeM()">Cancel</button>`);
+  $('#confirmPay').onclick = () => finish(payerName);
+}
+
+async function finish(payerName) {
+  if (paying) return; paying = true;
+  const btn = $('#confirmPay'); btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Confirming payment…';
+  try {
+    // Naira on-ramp collects money, signs the Stellar payment into escrow.
+    const c = await fetch('/api/onramp/checkout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ requestId: token, amount, method, payerName }) });
+    const cj = await c.json(); if (!c.ok) throw new Error(cj.error);
+    btn.innerHTML = '<span class="spinner"></span> Locking money in escrow…';
+    // x402 step 2: retry with X-PAYMENT.
+    const res = await fetch(`/api/pay/${token}/contribute`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-PAYMENT': cj.xPayment }, body: JSON.stringify({ amount }) });
+    const j = await res.json(); if (!res.ok) throw new Error(j.error);
+    R = j.request;
+    const s = j.settlement;
+    modal(`<div class="success"><div class="tick">✓</div><h2>Thank you, ${esc(payerName)}!</h2>
+      <p>${naira(amount)} received and <b>held in escrow</b>.<br>The lab has been told to start.</p>
+      <p class="small muted">Receipt ${esc(cj.receiptId)}<br>${s.explorer ? `<a href="${esc(s.explorer)}" target="_blank">Stellar transaction ↗</a>` : `Stellar tx ${esc(s.transaction.slice(0, 16))}… <span class="badge b-sim">SIMULATED</span>`}</p>
+      <button class="btn" onclick="closeM()">Done</button></div>`);
+    render();
+  } catch (e) { toast('⚠ ' + e.message); closeM(); }
+  paying = false;
+}
+window.closeM = closeM;
+load();
+setInterval(() => { if (!$('#modalBg').classList.contains('open') && document.activeElement.tagName !== 'INPUT') load(); }, 4000);
+</script>
+</body>
+</html>

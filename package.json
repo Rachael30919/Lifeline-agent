@@ -1,0 +1,14 @@
+{
+  "name": "lifeline-agent",
+  "version": "1.0.0",
+  "description": "LifeLine Agent: treat first, the Agent holds the money in Stellar escrow.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "start:simulated": "node server.js --simulated"
+  },
+  "dependencies": {
+    "@stellar/stellar-sdk": "^17.4.0",
+    "express": "^4.21.2"
+  }
+}

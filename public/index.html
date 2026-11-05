@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LifeLine Agent</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="top">
+    <div class="row">
+      <div class="logo"><div class="mark">✚</div><div>LifeLine Agent<small>Treat first. The Agent holds the money.</small></div></div>
+      <div class="row">
+        <div class="pills" id="pills"></div>
+        <button class="btn small light" id="resetBtn" title="Reload the demo data">Reset demo</button>
+      </div>
+    </div>
+  </header>
+  <nav class="tabs" id="tabs">
+    <a href="#guide">Demo guide</a>
+    <a href="#doctor">1 · Doctor</a>
+    <a href="#lab">2 · Lab dashboard</a>
+    <a href="#donors">3 · Blood donors</a>
+    <a href="#discharge">4 · Discharge</a>
+    <a href="#messages">Messages sent</a>
+  </nav>
+  <div class="layout">
+    <main id="main"></main>
+    <aside>
+      <div class="card feed">
+        <div class="section-title"><h3><span class="agent-dot"></span>What the Agent is doing</h3></div>
+        <div class="list" id="feed"></div>
+      </div>
+    </aside>
+  </div>
+
+  <div class="modal-bg" id="modalBg"><div class="modal" id="modal"></div></div>
+  <div class="toast" id="toast"></div>
+  <script src="/app.js"></script>
+</body>
+</html>
